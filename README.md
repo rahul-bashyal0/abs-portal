@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Project Overview — ABS Portal
 
 Purpose
@@ -21,161 +22,60 @@ Contents
 6. Routes and controllers (mapping)
 7. File storage & attachments
 8. Seeders & initialization
-9. Recommendations & next steps
+## Setup & local development
+2. Install frontend dependencies
 
+```bash
+npm install
+npm run dev   # or `npm run build` for production
+```
 
-## 1. Roles & permissions
+3. Configure environment
 
-- super_admin
-  - Full access to manage colleges (institutes), users (create/edit/delete college_admins & reviewers), and submissions (list and assign reviewers).
-  - Route group: `/superadmin/*` guarded by `role:super_admin` middleware.
+```bash
+cp .env.example .env
+php artisan key:generate
+# Edit .env to set DB_CONNECTION, DB_DATABASE, DB_USERNAME, DB_PASSWORD, APP_URL, etc.
+```
 
-- college_admin
-  - Scoped to a single college via `college_id`.
-  - Approves or rejects pending student registrations for their college.
-  - Route group: `/college/*` guarded by `role:college_admin` middleware.
+4. Run migrations and seeders
 
-- reviewer
-  - Assigned to submissions by super_admin. Reviews submissions and leaves feedback.
-  - Reviewers are associated with the special college `ABS Soft Pvt. Ltd` in the current implementation.
-  - Route group: `/reviewer/*` guarded by `role:reviewer` middleware.
+```bash
+php artisan migrate
+php artisan db:seed
+```
 
-- student
-  - Registers for the portal, chooses a college, submits project ideas, and can download certificates if shortlisted.
-  - Must be approved by their college admin (`is_approved` flag) before gaining full access.
-  - Route group: `/student/*` guarded by `role:student` middleware.
+Note: `AbsSoftInstituteSeeder` is included and should (when run) create the ABS Soft institute used for reviewers.
 
-## 2. User onboarding
+5. Serve the app
 
-- Public registration (students):
-  - Route: `GET /register` shows a registration form (`auth.register` view) with a college dropdown.
-  - On POST, `RegisteredUserController@store` validates input and creates a user with `role = student` and `is_approved = false`.
-  - The user receives a status message and must wait for their college admin to approve the account.
+```bash
+php artisan serve
+# and front-end dev server if needed:
+npm run dev
+```
 
-- Admin-created users (super_admin):
-  - Super admin creates `college_admin` or `reviewer` accounts via `SuperAdminController` UI.
-  - Reviewers are automatically assigned to the ABS Soft institute (lookup by name). Created admins and reviewers are marked `is_approved = true` so they can sign in immediately.
+6. Run tests
 
-- Initial setup:
-  - Seeder `AbsSoftInstituteSeeder` ensures the `ABS Soft Pvt. Ltd` college exists.
-  - Super admin account may be created via seeder or Tinker as part of deploy steps.
+```bash
+php artisan test
+# or
+vendor/bin/pest
+```
 
-## 3. Dashboards and capabilities (end-user view)
+## Default / seed data
 
-- Super Admin Dashboard:
-  - Views: `resources/views/superadmin/*` (institutes, users, submissions)
-  - Capabilities:
-    - Create/edit/delete colleges
-    - Create/edit/delete users (college_admin, reviewer)
-    - View submissions and assign reviewers
+- There is a seeder named `AbsSoftInstituteSeeder` which creates the ABS Soft institute. Run `php artisan db:seed` to populate initial data.
 
-- College Admin Dashboard:
-  - Views: `resources/views/college/*`
-  - Capabilities:
-    - View pending student registrations for their college
-    - Approve or reject students
-    - (Potential extension) Manage students or college-level reports
+## Recommendations & next steps
 
-- Reviewer Dashboard:
-  - Views: `resources/views/reviewer/*`
-  - Capabilities:
-    - See submissions assigned to them
-    - Provide feedback on assigned submissions (via `ReviewerController`)
+1. Replace the magic string `ABS Soft Pvt. Ltd` with a config value (e.g., `config/abs.php`) and reference the config in controllers. This avoids duplication and makes it easier to change.
+2. Add tests for reviewer creation and submission assignment to avoid regressions.
+3. Add stronger validation or a seeder check so reviewer creation fails loudly if the ABS institute is missing.
+4. Review cascade behavior on college deletion and decide whether to use `ON DELETE CASCADE` or `RESTRICT` based on business rules.
 
-- Student Dashboard:
-  - Views: `resources/views/student/dashboard.blade.php` and create form `student/submissions/create.blade.php`
-  - Capabilities:
-    - Submit new project ideas (title, problem statement, solution, tech stack, optional video link, file upload)
-    - View their submissions timeline with status (Submitted -> Under Review -> Decision Made)
-    - Download certificate if submission status is 'Shortlisted'
+If you'd like, I can implement one of these now (config extraction, seed enforcement, or tests). Tell me which and I will implement it and run the relevant checks.
 
-## 4. Submission lifecycle
-
-- States tracked on the `submissions` table: `status` (defaults to 'Submitted'), `is_shortlisted_for_internship` (boolean), `reviewer_id` (nullable).
-- Typical flow:
-  1. Student creates submission: status 'Submitted'.
-  2. Super admin assigns a reviewer: status updated to 'Under Review'.
-  3. Reviewer reviews, submits feedback. Based on feedback or decision, super admin or reviewer sets status to 'Shortlisted' or 'Rejected' (or other statuses like 'Internship Offered').
-  4. If 'Shortlisted', the student can download a certificate.
-
-## 5. Data model (core tables)
-
-- `users` (Laravel default) plus added fields:
-  - `role` (string)
-  - `college_id` (unsignedBigInteger, nullable)
-  - `is_approved` (boolean)
-
-- `colleges`:
-  - `id`, `name`, `city`, `state`, `timestamps`
-
-- `submissions`:
-  - `id`, `user_id`, `reviewer_id` (nullable), `title`, `problem_statement`, `solution_description`, `technologies_used`, `video_link`, `file_path`, `status`, `is_shortlisted_for_internship`, `timestamps`
-
-- `feedback` (exists as model relation, check `app/Models/Feedback.php` for details)
-
-## 6. Routes & controllers (mapping)
-
-- Public/Auth
-  - `routes/auth.php` — registration and login handled by Laravel Breeze-styled auth scaffolding. Key controller: `RegisteredUserController`.
-
-- Super Admin
-  - Controller: `App\Http\Controllers\SuperAdminController`
-  - Routes: `routes/web.php` group prefix `superadmin` with named routes like `superadmin.colleges.index`, `superadmin.users.index`, `superadmin.submissions.index`, `superadmin.submissions.assign`.
-
-- College Admin
-  - Controller: `App\Http\Controllers\CollegeAdminController`
-  - Routes: `/college/students/pending`, `/college/students/{user}/approve`.
-
-- Student
-  - Controller: `App\Http\Controllers\StudentController`
-  - Routes: `/student/submission/create` (GET), `/student/submission` (POST), `/student/submission/{submission}/certificate` (GET).
-
-- Reviewer
-  - Controller: `App\Http\Controllers\ReviewerController`
-  - Routes: `/reviewer/submission/{submission}`, `/reviewer/submission/{submission}/feedback`.
-
-- Certificate
-  - Controller: `App\Http\Controllers\CertificateController` — handles rendering/downloading certificates for shortlisted students.
-
-## 7. File storage & attachments
-
-- Student uploads (supporting file) are stored on the `public` disk at `submissions/` via `$request->file('file')->store('submissions', 'public')`.
-- Ensure `php artisan storage:link` is executed so files are accessible from the web at `/storage/submissions/...` if that's intended.
-- Consider access control for files if files should be private.
-
-## 8. Seeders & initialization
-
-- `database/seeders/AbsSoftInstituteSeeder.php` creates the `ABS Soft Pvt. Ltd` college (if not present) via `firstOrCreate`.
-- Database seeding should be part of the initial deploy process; add seeder calls in `DatabaseSeeder` if not present.
-- Optionally add a seeder to create a default `super_admin` user for first access.
-
-## 9. Recommendations & next steps
-
-- Replace the `ABS Soft Pvt. Ltd` magic string with a configuration key.`config/abs.php` or `config/app.php` would be a good place.
-- Add a seeder to create a default `super_admin` (one-time safe seeder that checks for existing email).
-- Add feature tests for critical flows:
-  - Student registration and approval by college admin.
-  - Submission creation and file upload behavior.
-  - Reviewer assignment and feedback flow.
-- Add email notifications when submission status changes (Submitted -> Under Review -> Shortlisted/Rejected).
-- Use DB transactions or filesystem cleanup logic in the submission creation flow to avoid orphaned files if DB write fails.
-- Consider privacy for uploaded files: if they contain sensitive content, don't serve them directly from `public` disk; stream them through a controller that verifies access.
-
-
-Appendix: quick links to code
-
-- `app/Http/Controllers/SuperAdminController.php` — institute/user/submission management
-- `app/Http/Controllers/StudentController.php` — submission creation
-- `app/Http/Controllers/CollegeAdminController.php` — pending student approvals
-- `app/Models/College.php`, `app/Models/User.php`, `app/Models/Submission.php`
-- `resources/views/student/*`, `resources/views/superadmin/*`, `resources/views/reviewer/*`, `resources/views/college/*`
-- `routes/web.php`, `routes/auth.php`
-
-
-If you'd like, I can now:
-- Convert this overview into a README section or a wiki page.
-- Implement the config refactor for the ABS Soft magic string and update controllers.
-- Add a `super_admin` seeder and/or a seed-safe super_admin creation.
-- Add feature tests for the student submission flow (happy path + attachments).
-
-Which of those should I do next?
+---
+Generated on: October 15, 2025
+>>>>>>> ce27dcc (Initial commit: project import)
